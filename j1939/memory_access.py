@@ -13,6 +13,7 @@ class MemoryAccess:
     def __init__(self, ca: j1939.ControllerApplication) -> None:
         """
         Makes an overarching Memory access class
+
         :param ca: Controller Application
         """
         self._ca = ca
@@ -22,14 +23,33 @@ class MemoryAccess:
         self.state = DMState.IDLE
         self.seed_security = False
         self._notify_query_received = None
-        self._seed_key_valid = None
         self._proceed_function = None
+
+    def _handle_error(self, priority: int, pgn: int, sa: int, timestamp: int, data: bytearray, error_code: int) -> None:
+        """
+        Handles errors by resetting the state and unsubscribing from DM14 messages
+
+        :param priority: Priority of the message
+        :param pgn: Parameter Group Number of the message
+        :param sa: Source Address of the message
+        :param timestamp: Timestamp of the message
+        :param data: Data of the PDU
+        :param error_code: Error code to be set
+        """
+        self.server.error = error_code
+        self.server.set_busy(True)
+        self.server.parse_dm14(
+            priority, pgn, sa, timestamp, data
+        )
+        self.server.set_busy(False)
+        self.reset()
 
     def _listen_for_dm14(
         self, priority: int, pgn: int, sa: int, timestamp: int, data: bytearray
     ) -> None:
         """
         Listens for dm14 messages and passes them to the appropriate function
+
         :param priority: Priority of the message
         :param pgn: Parameter Group Number of the message
         :param sa: Source Address of the message
@@ -64,15 +84,7 @@ class MemoryAccess:
                                 if self.proceed:
                                     self._notify_query_received()  # notify incoming request
                                 else:
-                                    self.server.error = 0x100
-                                    self.server.set_busy(True)
-                                    self.server.parse_dm14(
-                                        priority, pgn, sa, timestamp, data
-                                    )
-                                    self.server.set_busy(False)
-                                    self.server.reset_query()
-                                    self.state = DMState.IDLE
-                                    self.server.error = 0x0
+                                    self._handle_error(priority, pgn, sa, timestamp, data, 0x100)
 
                 case DMState.REQUEST_STARTED:
                     self.server.parse_dm14(priority, pgn, sa, timestamp, data)
@@ -101,24 +113,9 @@ class MemoryAccess:
                                     if self.proceed:
                                         self._notify_query_received()  # notify incoming request
                                     else:
-                                        self.server.error = 0x100
-                                        self.server.set_busy(True)
-                                        self.server.parse_dm14(
-                                            priority, pgn, sa, timestamp, data
-                                        )
-                                        self.server.set_busy(False)
-                                        self.server.reset_query()
-                                        self.state = DMState.IDLE
-                                        self.server.error = 0x0
+                                        self._handle_error(priority, pgn, sa, timestamp, data, 0x100)
                             else:
-                                self.server.error = 0x1003
-                                self.server.set_busy(True)
-                                self.server.parse_dm14(
-                                    priority, pgn, sa, timestamp, data
-                                )
-                                self.server.set_busy(False)
-                                self.state = DMState.IDLE
-                                self.server.error = 0x0
+                                self._handle_error(priority, pgn, sa, timestamp, data, 0x1003)
 
                 case DMState.WAIT_QUERY:
                     self.server.set_busy(True)
@@ -137,6 +134,7 @@ class MemoryAccess:
     ) -> list:
         """
         Responds with requested data and error code, if applicable, to a read request
+
         :param bool proceed: whether the operation is good to proceed
         :param list data: data to be sent to device
         :param int error: error code to be sent to device
@@ -189,7 +187,7 @@ class MemoryAccess:
                 return_raw_bytes,
                 max_timeout,
             )
-            self.state = DMState.IDLE
+            self.reset()
             return data
         else:
             raise RuntimeWarning("Process already Running")
@@ -205,6 +203,7 @@ class MemoryAccess:
     ) -> None:
         """
         Send a write query to dest_address, requesting to write values at address
+
         :param int dest_address: destination address of the message
         :param int direct: direct address of the message
         :param int address: address of the message
@@ -218,18 +217,20 @@ class MemoryAccess:
             self.query.write(
                 dest_address, direct, address, values, object_byte_size, max_timeout
             )
-            self.state = DMState.IDLE
+            self.reset()
 
     def set_seed_generator(self, seed_generator: callable) -> None:
         """
         Sets seed generator function to use
+
         :param seed_generator: seed generator function
         """
         self.server.set_seed_generator(seed_generator)
 
     def set_seed_key_algorithm(self, algorithm: callable) -> None:
         """
-        set seed-key algorithm to be used for key generation
+        Sets seed-key algorithm to be used for key generation
+
         :param callable algorithm: seed-key algorithm
         """
         self.seed_security = True
@@ -238,28 +239,33 @@ class MemoryAccess:
 
     def set_verify_key(self, verify_key: callable) -> None:
         """
-        set verify key function to be used for verifying the key
+        Sets verify key function to be used for verifying the key
+
         :param callable verify_key: verify key function
         """
         self.server.set_verify_key(verify_key)
 
     def set_notify(self, notify: callable) -> None:
         """
-        set notify function to be used for notifying the user of memory accesses
+        Sets notify function to be used for notifying the user of memory accesses
+
         :param callable notify: notify function
         """
         self._notify_query_received = notify
 
     def set_proceed(self, proceed: callable) -> None:
         """
-        set proceed function to determine if a memory query is valid or not
+        Sets proceed function to determine if a memory query is valid or not
+
         :param callable proceed: proceed function
         """
         self._proceed_function = proceed
 
-    def reset_query(self) -> None:
+    def reset(self) -> None:
         """
-        reset query for the server
+        Resets both server and query to remove transaction specific data
         """
-        self._ca.subscribe(self._listen_for_dm14)
-        self.server.reset_query()
+        self.state = DMState.IDLE
+        self._ca.unique_subscribe(self._listen_for_dm14)
+        self.server.reset_server()
+        self.query.reset_query()

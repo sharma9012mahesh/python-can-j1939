@@ -329,11 +329,12 @@ class DM14Server:
             )
         return self._key_from_seed(seed) == key
 
-    def reset_query(self) -> None:
+    def reset_server(self) -> None:
         """
-        Resets query to initial state
+        Resets server to remove transaction specific data
         """
         self.state = ResponseState.IDLE
+        self.data_queue = queue.Queue()
         self.sa = None
         self.seed = None
         self.key = None

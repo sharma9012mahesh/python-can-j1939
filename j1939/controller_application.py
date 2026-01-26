@@ -77,6 +77,13 @@ class ControllerApplication:
         """
         self._ecu.subscribe(callback, self.message_acceptable)
 
+    def unique_subscribe(self, callback):
+        """Add the given callback to the message notification stream only once.
+        :param callback:
+            Function to call when message is received.
+        """
+        self._ecu.unique_subscribe(callback, self.message_acceptable)
+        
     def unsubscribe(self, callback):
         """Stop listening for message.
         :param callback:
