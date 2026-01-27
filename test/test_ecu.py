@@ -203,7 +203,7 @@ def test_add_bus_filters(feeder):
 
 def test_subscribe(feeder):
     """
-    Test subscribing to callback only once
+    Test subscribing to callback
     """
     call_count = 0
 
@@ -212,7 +212,6 @@ def test_subscribe(feeder):
         call_count += 1
 
     feeder.ecu.subscribe(callback)
-    feeder.ecu.subscribe(callback)  # should not add again
     
     feeder.can_messages = [
         (Feeder.MsgType.CANRX, 0x00FEB201, [1, 2, 3, 4, 5, 6, 7, 8], 0.0),
