@@ -207,7 +207,7 @@ def test_subscribe_unique(feeder):
     """
     call_count = 0
 
-    def callback(msg):
+    def callback(priority: int, pgn: int, sa: int, timestamp: int, data: bytearray):
         nonlocal call_count
         call_count += 1
 
@@ -217,6 +217,8 @@ def test_subscribe_unique(feeder):
     feeder.can_messages = [
         (Feeder.MsgType.CANRX, 0x00FEB201, [1, 2, 3, 4, 5, 6, 7, 8], 0.0),
     ]
+
+    feeder.pdus = [(Feeder.MsgType.PDU, 65202, [1, 2, 3, 4, 5, 6, 7, 8])]
 
     feeder.receive()
 
