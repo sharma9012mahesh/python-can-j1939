@@ -132,7 +132,7 @@ class ElectronicControlUnit:
         self._bus = None
 
     def subscribe(self, callback, device_address=None):
-        """Add the given callback to the message notification stream. If it's not already subscribed
+        """Add the given callback to the message notification stream.
 
         :param callback:
             Function to call when message is received.
@@ -142,9 +142,6 @@ class ElectronicControlUnit:
             Only one device address can be entered. Multiple device addresses are only possible with controller applications.
             Note: TP.CMDT will only be received if the destination address is bound to a controller application.
         """
-        for dic in self._subscribers:
-            if dic['cb'] == callback and dic['dev_adr'] == device_address:
-                return
         self._subscribers.append({'cb': callback, 'dev_adr':device_address})
 
     def unsubscribe(self, callback):
@@ -377,7 +374,10 @@ class ElectronicControlUnit:
         logger.debug("notify subscribers for PGN {}".format(pgn))
         # notify only the CA for which the message is intended
         # each CA receives all broadcast messages
-        for dic in self._subscribers:
+
+        # TODO: this is ineffecient but there exists a possibility of removing subscribers during callback
+        # and adding new ones in while this is going and it can impact message receivement
+        for dic in self._subscribers.copy():
             if (dic['dev_adr'] == None) or (dest == ParameterGroupNumber.Address.GLOBAL) or (callable(dic['dev_adr']) and dic['dev_adr'](dest)) or (dest == dic['dev_adr']):
                 dic['cb'](priority, pgn, sa, timestamp, data)
 

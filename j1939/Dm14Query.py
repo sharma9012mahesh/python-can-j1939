@@ -45,6 +45,13 @@ class Dm14Query:
         self.exception_queue = queue.Queue()
         self.user_level = user_level
 
+    def unsubscribe_all(self) -> None:
+        """
+        Unsubscribes all message handlers
+        """
+        self._ca.unsubscribe(self._parse_dm15)
+        self._ca.unsubscribe(self._parse_dm16)
+        
     def reset_query(self) -> None:
         """
         Resets query to remove transaction specific data
@@ -62,6 +69,7 @@ class Dm14Query:
         self.mem_data = None
         self.data_queue = queue.Queue()
         self.exception_queue = queue.Queue()
+        self.unsubscribe_all()
 
 
     def _wait_for_data(self) -> None:

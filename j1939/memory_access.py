@@ -7,6 +7,7 @@ class DMState(Enum):
     REQUEST_STARTED = 2
     WAIT_RESPONSE = 3
     WAIT_QUERY = 4
+    SERVER_CLEANUP = 5
 
 
 class MemoryAccess:
@@ -121,9 +122,11 @@ class MemoryAccess:
                     self.server.set_busy(True)
                     self.server.parse_dm14(priority, pgn, sa, timestamp, data)
                     self.server.set_busy(False)
+                case DMState.SERVER_CLEANUP:
+                    self.state = DMState.IDLE
                 case _:
                     pass
-
+        
     def respond(
         self,
         proceed: bool,
@@ -143,14 +146,15 @@ class MemoryAccess:
         """
         if data is None:
             data = []
-        if self.state is DMState.WAIT_RESPONSE:
-            self._ca.unsubscribe(self._listen_for_dm14)
-            self.state = DMState.IDLE
-            return_data = self.server.respond(proceed, data, error, edcp, max_timeout)
-            self._ca.subscribe(self._listen_for_dm14)
-            return return_data
-        else:
+        
+        if self.state is not DMState.WAIT_RESPONSE:
             return data
+        
+        self._ca.unsubscribe(self._listen_for_dm14)
+        return_data = self.server.respond(proceed, data, error, edcp, max_timeout)
+        self.state = DMState.SERVER_CLEANUP if self.server.state.value != DMState.IDLE.value else DMState.IDLE
+        self._ca.subscribe(self._listen_for_dm14)
+        return return_data
 
     def read(
         self,
@@ -165,6 +169,7 @@ class MemoryAccess:
     ) -> list:
         """
         Make a dm14 read Query
+
         :param int dest_address: destination address of the message
         :param int direct: direct address of the message
         :param int address: address of the message
@@ -190,6 +195,7 @@ class MemoryAccess:
             self.reset()
             return data
         else:
+            self.reset()
             raise RuntimeWarning("Process already Running")
 
     def write(
@@ -222,7 +228,6 @@ class MemoryAccess:
     def set_seed_generator(self, seed_generator: callable) -> None:
         """
         Sets seed generator function to use
-
         :param seed_generator: seed generator function
         """
         self.server.set_seed_generator(seed_generator)
@@ -266,6 +271,7 @@ class MemoryAccess:
         Resets both server and query to remove transaction specific data
         """
         self.state = DMState.IDLE
+        self._ca.unsubscribe(self._listen_for_dm14)
         self._ca.subscribe(self._listen_for_dm14)
         self.server.reset_server()
         self.query.reset_query()

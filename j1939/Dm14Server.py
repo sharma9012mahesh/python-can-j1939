@@ -161,9 +161,7 @@ class DM14Server:
                 self.state = ResponseState.SEND_PROCEED
 
             case ResponseState.WAIT_OPERATION_COMPLETE:
-                self.state = ResponseState.IDLE
-                self.sa = None
-                self._ca.unsubscribe(self.parse_dm14)
+                self.reset_server()
 
             case _:
                 raise ValueError("Invalid state")
@@ -255,12 +253,12 @@ class DM14Server:
 
         if pgn != j1939.ParameterGroupNumber.PGN.DM16 or sa != self.sa:
             return
-
         length = min(data[0], len(data) - 1)
         self.data_queue.put(data[1 : length + 1])
         self._ca.unsubscribe(self._parse_dm16)
         self._ca.subscribe(self.parse_dm14)
         self.state = ResponseState.SEND_OPERATION_COMPLETE
+
         self._send_dm15(
             self.length,
             self.direct,
@@ -329,6 +327,13 @@ class DM14Server:
             )
         return self._key_from_seed(seed) == key
 
+    def unsubscribe_all(self) -> None:
+        """
+        Unsubscribes all message handlers
+        """
+        self._ca.unsubscribe(self.parse_dm14)
+        self._ca.unsubscribe(self._parse_dm16)
+
     def reset_server(self) -> None:
         """
         Resets server to remove transaction specific data
@@ -347,8 +352,7 @@ class DM14Server:
         self.edcp = 0x07
         self.status = j1939.Dm15Status.PROCEED.value
         self.direct = 0
-        self._ca.unsubscribe(self.parse_dm14)
-        self._ca.unsubscribe(self._parse_dm16)
+        self.unsubscribe_all()
 
     def respond(
         self,
