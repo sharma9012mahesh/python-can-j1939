@@ -201,9 +201,9 @@ def test_add_bus_filters(feeder):
     feeder.ecu.add_bus_filters(filters)
     assert feeder.ecu._bus.filters == filters
 
-def test_subscribe_unique(feeder):
+def test_subscribe(feeder):
     """
-    Test unique subscribing to messages
+    Test subscribing to callback only once
     """
     call_count = 0
 
@@ -211,8 +211,8 @@ def test_subscribe_unique(feeder):
         nonlocal call_count
         call_count += 1
 
-    feeder.ecu.unique_subscribe(callback)
-    feeder.ecu.unique_subscribe(callback)  # should not add again
+    feeder.ecu.subscribe(callback)
+    feeder.ecu.subscribe(callback)  # should not add again
     
     feeder.can_messages = [
         (Feeder.MsgType.CANRX, 0x00FEB201, [1, 2, 3, 4, 5, 6, 7, 8], 0.0),

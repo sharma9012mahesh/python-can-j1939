@@ -266,6 +266,6 @@ class MemoryAccess:
         Resets both server and query to remove transaction specific data
         """
         self.state = DMState.IDLE
-        self._ca.unique_subscribe(self._listen_for_dm14)
+        self._ca.subscribe(self._listen_for_dm14)
         self.server.reset_server()
         self.query.reset_query()

@@ -132,7 +132,7 @@ class ElectronicControlUnit:
         self._bus = None
 
     def subscribe(self, callback, device_address=None):
-        """Add the given callback to the message notification stream.
+        """Add the given callback to the message notification stream. If it's not already subscribed
 
         :param callback:
             Function to call when message is received.
@@ -142,19 +142,8 @@ class ElectronicControlUnit:
             Only one device address can be entered. Multiple device addresses are only possible with controller applications.
             Note: TP.CMDT will only be received if the destination address is bound to a controller application.
         """
-        self._subscribers.append({'cb': callback, 'dev_adr':device_address})
-
-    def unique_subscribe(self, callback, device_address=None):
-        """Add the given callback to the message notification stream only once.
-
-        :param callback:
-            Function to call when message is received.
-        :param int device_address:
-            Device address of the application.
-            This is a simple way for peer-to-peer reception without adding a controller-application.
-        """
         for dic in self._subscribers:
-            if dic['cb'] == callback:
+            if dic['cb'] == callback and dic['dev_adr'] == device_address:
                 return
         self._subscribers.append({'cb': callback, 'dev_adr':device_address})
 
