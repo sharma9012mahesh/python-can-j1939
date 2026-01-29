@@ -1,7 +1,8 @@
 from enum import Enum
-import j1939
 import threading
 import time
+import j1939
+
 class DMState(Enum):
     IDLE = 1
     REQUEST_STARTED = 2
