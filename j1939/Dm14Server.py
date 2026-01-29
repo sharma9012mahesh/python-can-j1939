@@ -164,6 +164,7 @@ class DM14Server:
                 self.reset_server()
 
             case _:
+                self.reset_server()
                 raise ValueError("Invalid state")
 
     def _send_dm15(
@@ -220,6 +221,7 @@ class DM14Server:
                 data[length - 3] = edcp
 
             case _:
+                self.reset_server()
                 raise ValueError("Invalid state")
         self._ca.send_pgn(0, (pgn >> 8) & 0xFF, sa & 0xFF, 6, data)
 
