@@ -1,6 +1,9 @@
 from enum import Enum
+import logging
 import threading
 import j1939
+
+logger = logging.getLogger(__name__)
 
 class DMState(Enum):
     IDLE = 1
@@ -15,6 +18,12 @@ class MemoryAccess:
         """
         Makes an overarching Memory access class
 
+        Spawns a background servicer thread tied to the lifetime of this
+        instance. Call :meth:`stop` (or use the instance as a context
+        manager) when done. The instance is also registered as a dependent
+        of the parent ECU, so ``ecu.stop()`` will cascade and tear this
+        instance down automatically.
+
         :param ca: Controller Application
         """
         self._ca = ca
@@ -27,6 +36,7 @@ class MemoryAccess:
         self._notify_query_received = None
         self._proceed_function = None
 
+        self._stopped = False
         self._job_thread_end = threading.Event()
         self._job_thread = threading.Thread(target=self._servicer, name='j1939.memory_access servicer_thread')
         # A thread can be flagged as a "daemon thread". The significance of
@@ -35,10 +45,71 @@ class MemoryAccess:
         self._job_thread.daemon = True
         self._job_thread.start()
 
-    def __del__(self):
+        # Register with the parent ECU so ecu.stop() cascades to this instance.
+        # Done after the thread has started so a failed registration during
+        # shutdown is still recoverable by the user calling stop() directly.
+        try:
+            self._ca.register_dependent(self)
+        except Exception:
+            # If registration fails (e.g. ECU already stopping) we still want
+            # the user to be able to stop us manually; just log and continue.
+            logger.exception("Failed to register MemoryAccess with ECU")
+
+    def stop(self, timeout: float = 2.0) -> None:
+        """Stop the background servicer thread and release resources.
+
+        Idempotent: subsequent calls are no-ops. Safe to call from any
+        thread, including from inside ``ecu.stop()``'s cascade.
+
+        :param float timeout:
+            Maximum time in seconds to wait for the servicer thread to exit.
+        """
+        if self._stopped:
+            return
+        self._stopped = True
+
+        # Signal shutdown and wake the servicer immediately so it does not
+        # have to wait out its full poll interval.
         self._job_thread_end.set()
+        self._proceed_event.set()
+
         if self._job_thread.is_alive():
-            self._job_thread.join()
+            self._job_thread.join(timeout=timeout)
+
+        # Best-effort cleanup of the CA-level subscription. If the CA/ECU
+        # is already torn down this may raise; that is fine.
+        try:
+            self._ca.unsubscribe(self._listen_for_dm14)
+        except Exception:
+            pass
+
+        # Best-effort removal from the ECU's dependent registry. If we are
+        # being called from inside the cascade this is a no-op (the registry
+        # has already been cleared); if we are being called explicitly it
+        # prevents a stale reference.
+        try:
+            self._ca.unregister_dependent(self)
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.stop()
+        return False
+
+    def __del__(self):
+        # Defensive backstop only. The primary cleanup paths are explicit
+        # stop() / context-manager exit / ecu.stop() cascade. Guard against
+        # partial __init__ (where _job_thread may not exist) and swallow all
+        # exceptions per the __del__ contract.
+        try:
+            if getattr(self, '_job_thread', None) is None:
+                return
+            self.stop()
+        except Exception:
+            pass
 
     def _servicer(self):
         """
@@ -48,6 +119,8 @@ class MemoryAccess:
         """
         while not self._job_thread_end.is_set():
             triggered = self._proceed_event.wait(timeout=1.0)
+            if self._job_thread_end.is_set():
+                return
             if triggered and self.state == DMState.WAIT_RESPONSE:
                 self._proceed_event.clear()
                 if self._notify_query_received is not None:

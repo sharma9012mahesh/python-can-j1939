@@ -210,3 +210,242 @@ def test_subscribe_unsubscribe_race(feeder):
 
     assert not errors, f"Exceptions during subscribe/unsubscribe race: {errors}"
     assert received_count[0] > 0, "No messages were received during the race"
+
+
+# ---------------------------------------------------------------------------
+# Dependent registry / cascaded shutdown
+# ---------------------------------------------------------------------------
+
+
+def _make_ca(ecu, device_address=0x80):
+    return ecu.add_ca(name=j1939.Name(
+        arbitrary_address_capable=0,
+        industry_group=j1939.Name.IndustryGroup.Industrial,
+        vehicle_system_instance=1,
+        vehicle_system=1,
+        function=1,
+        function_instance=1,
+        ecu_instance=1,
+        manufacturer_code=1,
+        identity_number=1,
+    ), device_address=device_address)
+
+
+def _j1939_threads():
+    return [t for t in threading.enumerate()
+            if t.name.startswith('j1939.') and t.is_alive()]
+
+
+class _FakeDependent:
+    def __init__(self, log, name, raise_on_stop=False):
+        self.log = log
+        self.name = name
+        self.raise_on_stop = raise_on_stop
+        self.stop_count = 0
+
+    def stop(self):
+        self.stop_count += 1
+        self.log.append(self.name)
+        if self.raise_on_stop:
+            raise RuntimeError(f"{self.name} blew up")
+
+
+def test_ecu_stop_cascades_to_memory_access():
+    """ecu.stop() alone must tear down a MemoryAccess servicer thread."""
+    from j1939.memory_access import MemoryAccess
+
+    ecu = _make_ecu()
+    ca = _make_ca(ecu)
+    MemoryAccess(ca)
+
+    # Sanity: servicer thread is running.
+    names = [t.name for t in _j1939_threads()]
+    assert 'j1939.memory_access servicer_thread' in names
+
+    ecu.stop()
+
+    # Give the OS a moment to actually reap the joined thread.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if not any(t.name == 'j1939.memory_access servicer_thread'
+                   for t in _j1939_threads()):
+            break
+        time.sleep(0.01)
+
+    remaining = [t.name for t in _j1939_threads()]
+    assert 'j1939.memory_access servicer_thread' not in remaining, remaining
+
+
+def test_ecu_stop_cascades_lifo():
+    """Dependents must be stopped in reverse registration order."""
+    ecu = _make_ecu()
+    log = []
+    a = _FakeDependent(log, 'A')
+    b = _FakeDependent(log, 'B')
+    c = _FakeDependent(log, 'C')
+    ecu.register_dependent(a)
+    ecu.register_dependent(b)
+    ecu.register_dependent(c)
+
+    ecu.stop()
+
+    assert log == ['C', 'B', 'A'], log
+
+
+def test_ecu_stop_continues_on_dependent_failure():
+    """A failing dependent.stop() must not prevent others from running."""
+    ecu = _make_ecu()
+    log = []
+    a = _FakeDependent(log, 'A')
+    b = _FakeDependent(log, 'B', raise_on_stop=True)
+    c = _FakeDependent(log, 'C')
+    ecu.register_dependent(a)
+    ecu.register_dependent(b)
+    ecu.register_dependent(c)
+
+    ecu.stop()  # must not raise
+
+    # All three should have had stop() called despite B raising.
+    assert log == ['C', 'B', 'A']
+    # And ECU's own threads are stopped.
+    assert not ecu._protocol_thread.is_alive()
+    assert not ecu._timer_thread.is_alive()
+
+
+def test_memory_access_explicit_stop_no_leak():
+    from j1939.memory_access import MemoryAccess
+
+    ecu = _make_ecu()
+    ca = _make_ca(ecu)
+    ma = MemoryAccess(ca)
+    ma.stop()
+
+    # Servicer must be gone even before ecu.stop().
+    deadline = time.monotonic() + 0.5
+    while time.monotonic() < deadline:
+        if not any(t.name == 'j1939.memory_access servicer_thread'
+                   for t in _j1939_threads()):
+            break
+        time.sleep(0.01)
+    assert not any(t.name == 'j1939.memory_access servicer_thread'
+                   for t in _j1939_threads())
+
+    ecu.stop()
+
+
+def test_memory_access_context_manager():
+    from j1939.memory_access import MemoryAccess
+
+    ecu = _make_ecu()
+    ca = _make_ca(ecu)
+    with MemoryAccess(ca) as ma:
+        assert ma._job_thread.is_alive()
+    # On context exit the servicer must be gone.
+    deadline = time.monotonic() + 0.5
+    while time.monotonic() < deadline:
+        if not ma._job_thread.is_alive():
+            break
+        time.sleep(0.01)
+    assert not ma._job_thread.is_alive()
+    ecu.stop()
+
+
+def test_memory_access_stop_idempotent():
+    from j1939.memory_access import MemoryAccess
+
+    ecu = _make_ecu()
+    ca = _make_ca(ecu)
+    ma = MemoryAccess(ca)
+    ma.stop()
+    ma.stop()  # must not raise or block
+    ma.stop()
+    ecu.stop()
+
+
+def test_memory_access_stop_is_fast():
+    from j1939.memory_access import MemoryAccess
+
+    ecu = _make_ecu()
+    ca = _make_ca(ecu)
+    ma = MemoryAccess(ca)
+
+    t0 = time.monotonic()
+    ma.stop()
+    elapsed = time.monotonic() - t0
+
+    ecu.stop()
+    assert elapsed < 0.050, (
+        f"MemoryAccess.stop() took {elapsed*1000:.1f}ms, expected < 50ms"
+    )
+
+
+def test_register_unregister_dependent_idempotent():
+    ecu = _make_ecu()
+    log = []
+    a = _FakeDependent(log, 'A')
+
+    ecu.register_dependent(a)
+    ecu.register_dependent(a)  # duplicate — must be silently deduped
+    ecu.unregister_dependent(a)
+    ecu.unregister_dependent(a)  # second unregister — must not raise
+
+    ecu.stop()
+    # A was unregistered before stop(), so it should not have been called.
+    assert log == []
+
+
+def test_register_dependent_requires_stop_method():
+    ecu = _make_ecu()
+    with pytest.raises(TypeError):
+        ecu.register_dependent(object())
+    ecu.stop()
+
+
+def test_register_dependent_rejected_during_shutdown():
+    ecu = _make_ecu()
+    log = []
+    blocker = _FakeDependent(log, 'blocker')
+    late = _FakeDependent(log, 'late')
+
+    # blocker.stop() tries to register a new dependent mid-shutdown — must fail.
+    captured = []
+
+    def blocker_stop():
+        log.append('blocker')
+        try:
+            ecu.register_dependent(late)
+        except RuntimeError as e:
+            captured.append(e)
+
+    blocker.stop = blocker_stop
+    ecu.register_dependent(blocker)
+
+    ecu.stop()
+
+    assert captured, "expected RuntimeError when registering during shutdown"
+    assert log == ['blocker']  # late was never registered, never stopped
+
+
+def test_dependent_registration_stress_no_leak():
+    """Create/stop many MemoryAccess instances; no servicer thread may leak."""
+    from j1939.memory_access import MemoryAccess
+
+    ecu = _make_ecu()
+    ca = _make_ca(ecu)
+
+    for _ in range(50):
+        ma = MemoryAccess(ca)
+        ma.stop()
+
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        servicers = [t for t in _j1939_threads()
+                     if t.name == 'j1939.memory_access servicer_thread']
+        if not servicers:
+            break
+        time.sleep(0.01)
+
+    ecu.stop()
+    servicers = [t for t in _j1939_threads()
+                 if t.name == 'j1939.memory_access servicer_thread']
+    assert not servicers, f"leaked {len(servicers)} servicer thread(s)"

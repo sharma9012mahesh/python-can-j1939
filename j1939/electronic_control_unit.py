@@ -53,6 +53,22 @@ class ElectronicControlUnit:
         self._timer_seq = 0
         self._timer_events_lock = threading.RLock()
 
+        # Dependent lifecycle registry.
+        #
+        # Any helper object that owns threads, timers, or other resources tied
+        # to this ECU should call :meth:`register_dependent` during construction
+        # and expose a ``stop()`` method. :meth:`stop` will invoke ``stop()`` on
+        # all registered dependents in LIFO order before tearing down its own
+        # threads, so users only need to call ``ecu.stop()`` to get a clean
+        # shutdown of the whole stack.
+        #
+        # Strong references are intentional: the contract is that the ECU is
+        # responsible for cleanup even if user code has dropped its last
+        # reference to the dependent.
+        self._dependents = []
+        self._dependents_lock = threading.RLock()
+        self._stopping = False
+
         self._job_thread_end = threading.Event()
 
         # Protocol thread: owns TP/BAM timeout management only — no user callbacks
@@ -77,12 +93,73 @@ class ElectronicControlUnit:
         """Stops the ECU background handling
 
         This Function explicitely stops the background handling of the ECU.
+
+        Before stopping the ECU's own protocol/timer threads, every registered
+        dependent (see :meth:`register_dependent`) has its ``stop()`` method
+        invoked in LIFO order. Exceptions raised by a dependent's ``stop()``
+        are logged and swallowed so a single misbehaving dependent cannot
+        prevent the rest of the shutdown from completing.
         """
+        # Snapshot dependents under lock, then mark the ECU as stopping so any
+        # late registrations are rejected.
+        with self._dependents_lock:
+            self._stopping = True
+            dependents = list(self._dependents)
+            self._dependents.clear()
+
+        # LIFO: most-recently registered first.
+        for dep in reversed(dependents):
+            try:
+                dep.stop()
+            except Exception:
+                logger.exception("Error stopping dependent %r", dep)
+
         self._job_thread_end.set()
         self._protocol_wakeup_queue.put(1)
         self._timer_wakeup_queue.put(1)
         self._protocol_thread.join()
         self._timer_thread.join()
+
+    def register_dependent(self, dependent):
+        """Register a helper whose ``stop()`` should be called by :meth:`stop`.
+
+        Any helper object that owns threads, timers, or other resources tied
+        to this ECU should call this during construction. ``ecu.stop()`` will
+        invoke ``dependent.stop()`` in LIFO order before tearing down its own
+        threads.
+
+        Duplicate registrations of the same object (by identity) are silently
+        ignored.
+
+        :param dependent:
+            Any object exposing a no-arg ``stop()`` method.
+
+        :raises RuntimeError:
+            If called while the ECU is shutting down.
+        :raises TypeError:
+            If ``dependent`` does not expose a callable ``stop`` attribute.
+        """
+        if not callable(getattr(dependent, 'stop', None)):
+            raise TypeError(
+                "dependent must expose a callable stop() method")
+        with self._dependents_lock:
+            if self._stopping:
+                raise RuntimeError(
+                    "Cannot register a dependent while the ECU is stopping")
+            for existing in self._dependents:
+                if existing is dependent:
+                    return
+            self._dependents.append(dependent)
+
+    def unregister_dependent(self, dependent):
+        """Remove a previously-registered dependent.
+
+        :param dependent:
+            The object previously passed to :meth:`register_dependent`.
+        """
+        with self._dependents_lock:
+            self._dependents = [
+                d for d in self._dependents if d is not dependent]
 
     def add_timer(self, delta_time, callback, cookie=None):
         """Adds a callback to the list of timer events
