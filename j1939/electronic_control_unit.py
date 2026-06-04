@@ -53,18 +53,7 @@ class ElectronicControlUnit:
         self._timer_seq = 0
         self._timer_events_lock = threading.RLock()
 
-        # Dependent lifecycle registry.
-        #
-        # Any helper object that owns threads, timers, or other resources tied
-        # to this ECU should call :meth:`register_dependent` during construction
-        # and expose a ``stop()`` method. :meth:`stop` will invoke ``stop()`` on
-        # all registered dependents in LIFO order before tearing down its own
-        # threads, so users only need to call ``ecu.stop()`` to get a clean
-        # shutdown of the whole stack.
-        #
-        # Strong references are intentional: the contract is that the ECU is
-        # responsible for cleanup even if user code has dropped its last
-        # reference to the dependent.
+        # Dependent lifecycle registry.  Any object that needs to be stopped before the ECU's own threads should be registered here. See :meth:`register_dependent`.
         self._dependents = []
         self._dependents_lock = threading.RLock()
         self._stopping = False
@@ -92,7 +81,7 @@ class ElectronicControlUnit:
     def stop(self):
         """Stops the ECU background handling
 
-        This Function explicitely stops the background handling of the ECU.
+        This Function explicitly stops the background handling of the ECU.
 
         Before stopping the ECU's own protocol/timer threads, every registered
         dependent (see :meth:`register_dependent`) has its ``stop()`` method
@@ -446,11 +435,6 @@ class ElectronicControlUnit:
         immediate re-evaluation of protocol deadlines.
         """
         self._protocol_wakeup_queue.put(1)
-
-    # Internal alias: the DLL constructors receive this as a callable named
-    # job_thread_wakeup; keep the old name pointing to the same method so any
-    # subclass or test that calls _job_thread_wakeup() still works.
-    _job_thread_wakeup = _protocol_wakeup
 
     def _notify_subscribers(self, priority, pgn, sa, dest, timestamp, data):
         """Feed incoming message to subscribers.
