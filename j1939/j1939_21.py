@@ -165,7 +165,6 @@ class J1939_21:
 
         with self._buffer_lock:
             # check receive buffers for timeout
-            # using "list(x)" to prevent "RuntimeError: dictionary changed size during iteration"
             for bufid in list(self._rcv_buffer):
                 buf = self._rcv_buffer[bufid]
                 if buf['deadline'] != 0:
@@ -182,7 +181,6 @@ class J1939_21:
                         del self._rcv_buffer[bufid]
 
             # check send buffers
-            # using "list(x)" to prevent "RuntimeError: dictionary changed size during iteration"
             for bufid in list(self._snd_buffer):
                 buf = self._snd_buffer[bufid]
                 if buf['deadline'] != 0:
