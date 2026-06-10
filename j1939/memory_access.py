@@ -70,29 +70,29 @@ class MemoryAccess:
                 return
             self._stopped = True
 
-            # Signal shutdown and wake the servicer immediately so it does not
-            # have to wait out its full poll interval.
-            self._job_thread_end.set()
-            self._proceed_event.set()
+        # Signal shutdown and wake the servicer immediately so it does not
+        # have to wait out its full poll interval.
+        self._job_thread_end.set()
+        self._proceed_event.set()
 
-            if self._job_thread.is_alive():
-                self._job_thread.join(timeout=timeout)
+        if self._job_thread.is_alive():
+            self._job_thread.join(timeout=timeout)
 
-            # Best-effort cleanup of the CA-level subscription. If the CA/ECU
-            # is already torn down this may raise; that is fine.
-            try:
-                self._ca.unsubscribe(self._listen_for_dm14)
-            except Exception:
-                pass
+        # Best-effort cleanup of the CA-level subscription. If the CA/ECU
+        # is already torn down this may raise; that is fine.
+        try:
+            self._ca.unsubscribe(self._listen_for_dm14)
+        except Exception:
+            pass
 
-            # Best-effort removal from the ECU's dependent registry. If we are
-            # being called from inside the cascade this is a no-op (the registry
-            # has already been cleared); if we are being called explicitly it
-            # prevents a stale reference.
-            try:
-                self._ca.unregister_dependent(self)
-            except Exception:
-                pass
+        # Best-effort removal from the ECU's dependent registry. If we are
+        # being called from inside the cascade this is a no-op (the registry
+        # has already been cleared); if we are being called explicitly it
+        # prevents a stale reference.
+        try:
+            self._ca.unregister_dependent(self)
+        except Exception:
+            pass
 
     def __enter__(self):
         return self
