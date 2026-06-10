@@ -7,6 +7,7 @@ large messages into transport protocol segments of 60 bytes each.
 import pytest
 
 from j1939.j1939_22 import J1939_22
+from j1939.message_id import FrameFormat
 from test_helpers.conftest import feeder
 
 
@@ -42,7 +43,7 @@ class TestChunkingAlgorithm:
         result = self.chunk_data(data, J1939_22.DataLength.TP)
         
         # Verify chunk count
-        expected_chunks = 2560 // 60 + (1 if 2560 % 60 else 0)
+        expected_chunks = 2560 // J1939_22.DataLength.TP + (1 if 2560 % J1939_22.DataLength.TP else 0)
         assert len(result) == expected_chunks
         
         # Verify all data preserved in order
@@ -81,14 +82,14 @@ class TestJ1939_22Integration:
         )
     
     def test_short_message_not_chunked(self, feeder):
-        """Data <= 60 bytes uses multi-pg path, not TP chunking."""
+        """Data <= J1939_22.DataLength.TP bytes uses multi-pg path, not TP chunking."""
         feeder.accept_all_messages()
         j1939_22 = self.create_j1939_22()
         
         result = j1939_22.send_pgn(
             data_page=0, pdu_format=0xFE, pdu_specific=0xFF,
-            priority=7, src_address=0x01, data=list(range(60)),
-            time_limit=0, frame_format=1
+            priority=7, src_address=0x01, data=list(range(J1939_22.DataLength.TP)),
+            time_limit=0, frame_format=FrameFormat.CEFF
         )
         
         assert result is True
@@ -104,7 +105,7 @@ class TestJ1939_22Integration:
         result = j1939_22.send_pgn(
             data_page=0, pdu_format=0xFE, pdu_specific=0xFF,
             priority=7, src_address=0x01, data=test_data,
-            time_limit=0, frame_format=1
+            time_limit=0, frame_format=FrameFormat.CEFF
         )
         
         assert result is True
@@ -162,7 +163,7 @@ class TestJ1939_22Integration:
         result = j1939_22.send_pgn(
             data_page=0, pdu_format=0xFE, pdu_specific=0xFF,
             priority=7, src_address=0x01, data=test_data,
-            time_limit=0, frame_format=1
+            time_limit=0, frame_format=FrameFormat.CEFF
         )
         
         assert result is True
