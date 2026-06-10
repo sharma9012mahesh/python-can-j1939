@@ -408,7 +408,15 @@ class ElectronicControlUnit:
                 while self._timer_events and self._timer_events[0][0] <= now:
                     deadline, seq, cb, cookie, delta = heapq.heappop(self._timer_events)
                     logger.debug("Deadline for timer event reached")
-                    if cb(cookie) == True:
+                    try:
+                        reschedule = (cb(cookie) is True)
+                    except Exception:
+                        #TODO: is there a better way to handle exceptions in user callbacks?  
+                        # We don't want one bad callback to break the timer thread, 
+                        # but we also don't want to just swallow it silently.
+                        logger.exception("Timer callback failed: %r", cb)
+                        reschedule = False
+                    if reschedule:
                         # reschedule: advance deadline past now to avoid burst catch-up
                         new_deadline = deadline + delta
                         while new_deadline < now:

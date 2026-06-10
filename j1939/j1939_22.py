@@ -601,7 +601,7 @@ class J1939_22:
                     # buffer already in use
                     logger.info('bam receive buffer already in use 0x%x', buffer_hash )
                     del self._rcv_buffer[buffer_hash]
-                    self.__put_bam_session(self._rcv_buffer['session'])
+                    self.__put_bam_session(session_num)
                     return
 
                 # init new buffer for this connection
