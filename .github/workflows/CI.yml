@@ -31,11 +31,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install vermin
+        run: pip install vermin
 
-      - name: Check syntax compatibility (target Python 3.10)
-        run: python -m compileall -q j1939/ test/ test_helpers/
+      - name: Check minimum Python version (must not exceed 3.10)
+        run: vermin --target=3.10- --backport enum j1939/
 
   test:
     # The type of runner that the job will run on
