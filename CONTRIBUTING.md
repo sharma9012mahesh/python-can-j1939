@@ -9,7 +9,7 @@ Thank you for your interest in contributing! Please read this guide before openi
 ## Setting up a development environment
 
 ```bash
-git clone https://github.com/juergenH87/python-can-j1939.git
+git clone https://github.com/RaulSMS/python-can-j1939.git
 cd python-can-j1939
 
 # Install the package in editable mode with test and lint dependencies
