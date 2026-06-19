@@ -3,8 +3,8 @@ SAE J1939 for Python
 
 |release| |docs|
 
-.. |release| image:: https://img.shields.io/pypi/v/can-j1939
-   :target: https://pypi.python.org/pypi/can-j1939/
+.. |release| image:: https://img.shields.io/pypi/v/python-can-j1939
+   :target: https://pypi.python.org/pypi/python-can-j1939/
    :alt: Latest Version on PyPi
 
 .. |docs| image:: https://readthedocs.org/projects/j1939/badge/?version=latest
@@ -80,22 +80,22 @@ Features
 Installation
 ------------
 
-Install can-j1939 with pip::
+Install python-can-j1939 with pip::
 
-    $ pip install can-j1939
+    $ pip install python-can-j1939
 
 or do the trick with::
 
-    $ git clone https://github.com/juergenH87/can-j1939.git
-    $ cd j1939
+    $ git clone https://github.com/RaulSMS/python-can-j1939.git
+    $ cd python-can-j1939
     $ pip install .
 
 Upgrade
 ------------
 
-Upgrade an already installed can-j1939 package::
+Upgrade an already installed python-can-j1939 package::
 
-    $ pip install --upgrade can-j1939
+    $ pip install --upgrade python-can-j1939
 
 
 Quick start
@@ -293,9 +293,12 @@ A more sophisticated example in which the CA class was overloaded to include its
 
 Credits
 -------
-This implementation was taken from https://github.com/benkfra/j1939, as no further development took place.
+This package is a fork of `can-j1939 <https://github.com/juergenH87/python-can-j1939>`_ by
+Juergen Heilgemeir, who greatly extended the original work and added J1939-22 (J1939-FD) support.
 
-Thanks for your great work!
+The original implementation was taken from https://github.com/benkfra/j1939 by Frank Benkert.
+
+Thanks to all contributors for their great work!
 
 
 
