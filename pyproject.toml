@@ -9,7 +9,7 @@ description = "SAE J1939 stack implementation (fork of can-j1939 by Juergen Heil
 readme = { file = "README.rst", content-type = "text/x-rst" }
 license = { file = "LICENSE" }
 authors = [
-    { name = "Raul Sainz-Maza"},
+    { name = "Raul Sainz-Maza" },
     { name = "Drew Rife" },
     { name = "Grant Allan" },
     { name = "Koltan Hauersperger" },
@@ -18,7 +18,7 @@ authors = [
     { name = "Victor Klueber" },
 ]
 maintainers = [
-    { name = "Raul Sainz-Maza"},
+    { name = "Raul Sainz-Maza" },
 ]
 keywords = ["CAN", "SAE", "J1939", "J1939-FD", "J1939-22"]
 classifiers = [
