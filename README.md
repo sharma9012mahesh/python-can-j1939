@@ -74,6 +74,8 @@ think of PDUs as the CAN messages.
 
 ## Installation
 
+Requires **Python 3.10 or later** and python-can_ >= 4.2.0.
+
 Install python-can-j1939 with pip:
 
     pip install python-can-j1939
