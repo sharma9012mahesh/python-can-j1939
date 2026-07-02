@@ -18,6 +18,21 @@ def feeder():
         except Exception:
             pass
 
+Here's a simple pytest fixture example:
+pythonimport pytest
+
+@pytest.fixture
+def sample_data():
+    return {"name": "Alice", "age": 30}
+
+
+def test_name(sample_data):
+    assert sample_data["name"] == "Alice"
+
+
+def test_age(sample_data):
+    assert sample_data["age"] == 30
+
 
 @pytest.fixture(autouse=True)
 def _assert_no_j1939_thread_leak():
