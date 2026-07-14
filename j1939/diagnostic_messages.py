@@ -445,7 +445,7 @@ class Dm22:
         data[0] = control_byte
         data[5] = spn & 0xFF
         data[6] = (spn >> 8) & 0xFF
-        data[7] = ((spn >> 22) & 0xE0) | (fmi & 0x1F)
+        data[7] = (((spn >> 16) & 0x07) << 5) | (fmi & 0x1F)
 
         # send pgn
         self._ca.send_pgn(0, (self._pgn >> 8) & 0xFF, dest_address & 0xFF, 6, data)
