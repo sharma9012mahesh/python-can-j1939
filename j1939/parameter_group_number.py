@@ -135,3 +135,33 @@ class ParameterGroupNumber:
     def value(self):
         """Returns the value of the PGN"""
         return (self.data_page << 16) | (self.pdu_format << 8) | self.pdu_specific
+
+    @property
+    def canonical_value(self):
+        """Returns the canonical PGN value, with the PS byte zeroed for PDU1 format.
+
+        For PDU1 format (pdu_format <= 239) the PS byte encodes a destination
+        address rather than being part of the PGN, per SAE J1939/21. `value`
+        includes it verbatim, so two frames addressed to different destinations
+        but carrying the same PDU1 PGN compare unequal under `value`. This
+        property normalizes PDU1 PGNs by zeroing the PS byte so they can be
+        compared/looked-up correctly; PDU2 PGNs (where PS is a Group Extension
+        and part of the PGN) are returned unchanged.
+        """
+        if self.is_pdu1_format:
+            return (self.data_page << 16) | (self.pdu_format << 8)
+        return self.value
+
+    @classmethod
+    def pgn_from_message_id(cls, mid):
+        """Returns the canonical PGN value extracted from a MessageId.
+
+        Convenience constructor equivalent to building a ParameterGroupNumber
+        via `from_message_id` and reading `canonical_value`.
+
+        :param mid:
+            An instance of MessageId to extract the canonical PGN from.
+        """
+        pgn = cls()
+        pgn.from_message_id(mid)
+        return pgn.canonical_value
